@@ -1,0 +1,45 @@
+sequenceDiagram
+    autonumber
+    participant C as Клієнт
+    participant API as API module
+    participant T as Transfer module
+    participant W as Wallet module
+    participant N as Notification module
+    participant DB as PostgreSQL
+    participant NW as Notification worker
+    participant P as Провайдер сповіщень
+
+    Note over DB: До переказу: A = 1000, Б = 200
+    C->>API: POST /transfers {operation_id=X, A→Б, 300}
+    API->>T: transfer(X, A, Б, 300)
+    rect rgb(230, 240, 255)
+    Note over T,DB: Межа транзакції починається
+    T->>DB: BEGIN
+    T->>DB: INSERT transfers (X, status=PROCESSING), UNIQUE(operation_id)
+    DB-->>T: ok, X ще не існував
+    T->>W: debit(A, 300)
+    W->>DB: UPDATE wallets SET balance = balance - 300 WHERE id = A AND balance ≥ 300
+    DB-->>W: 1 рядок змінено, перевірка залишку пройдена, A = 700
+    W-->>T: debit виконано
+    T->>W: credit(Б, 300)
+    W->>DB: UPDATE wallets SET balance = balance + 300 WHERE id = Б
+    DB-->>W: 1 рядок змінено, Б = 500
+    W-->>T: credit виконано
+    T->>DB: UPDATE transfers SET status = COMPLETED WHERE operation_id = X
+    T->>N: створити завдання на сповіщення (X)
+    N->>DB: INSERT notification_jobs (transfer X, status=pending)
+    T->>DB: COMMIT
+    Note over T,DB: Момент фіксації: усі зміни зафіксовано разом
+    end
+    DB-->>T: commit ok
+    T-->>API: COMPLETED
+    API-->>C: 200 COMPLETED (відповідь тільки після COMMIT)
+    Note over DB: Після переказу: A = 700, Б = 500, сума 1200
+    rect rgb(235, 255, 235)
+    Note over NW,P: Окремо, поза транзакцією
+    NW->>DB: claim job (атомарно закріпити завдання)
+    DB-->>NW: завдання закріплено
+    NW->>P: надіслати лист
+    P-->>NW: лист прийнято провайдером
+    NW->>DB: UPDATE notification_jobs SET status = sent
+    end

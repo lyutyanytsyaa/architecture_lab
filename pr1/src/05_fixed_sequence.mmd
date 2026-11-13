@@ -1,0 +1,56 @@
+sequenceDiagram
+    autonumber
+    participant C1 as Клієнт 1 (T1: A→Б, 700)
+    participant C2 as Клієнт 2 (T2: A→В, 700)
+    participant API as API module
+    participant T as Transfer module
+    participant W as Wallet module
+    participant DB as PostgreSQL
+
+    Note over DB: Початково: A = 1000, Б = 0, В = 0
+    C1->>API: POST /transfers {X1, A→Б, 700}
+    C2->>API: POST /transfers {X2, A→В, 700}
+    API->>T: T1: transfer(X1, A, Б, 700)
+    API->>T: T2: transfer(X2, A, В, 700)
+
+    rect rgb(230, 240, 255)
+    Note over T,DB: Транзакція T1: BEGIN
+    T->>DB: T1: BEGIN, INSERT transfers (X1, PROCESSING)
+    T->>W: T1: debit(A, 700)
+    W->>DB: T1: UPDATE wallets SET balance = balance - 700 WHERE id = A AND balance ≥ 700
+    Note over DB: КЛЮЧОВИЙ КРОК: перевірка і зміна одним неподільним UPDATE, рядок A заблоковано транзакцією T1
+    DB-->>W: T1: 1 рядок змінено, A = 300
+    W-->>T: T1: debit виконано
+    end
+
+    rect rgb(255, 240, 230)
+    Note over T,DB: Транзакція T2: BEGIN
+    T->>DB: T2: BEGIN, INSERT transfers (X2, PROCESSING)
+    T->>W: T2: debit(A, 700)
+    W->>DB: T2: UPDATE wallets SET balance = balance - 700 WHERE id = A AND balance ≥ 700
+    Note over DB: T2 ЧЕКАЄ: рядок A заблоковано T1
+    end
+
+    rect rgb(230, 240, 255)
+    T->>W: T1: credit(Б, 700)
+    W->>DB: T1: UPDATE wallets SET balance = balance + 700 WHERE id = Б
+    DB-->>W: Б = 700
+    W-->>T: T1: credit виконано
+    T->>DB: T1: UPDATE transfers SET status = COMPLETED (X1), INSERT notification_jobs (через Notification module)
+    T->>DB: T1: COMMIT
+    Note over DB: A = 300, Б = 700 зафіксовано, блокування рядка A знято
+    T-->>API: T1: COMPLETED
+    API-->>C1: 200 COMPLETED
+    end
+
+    rect rgb(255, 240, 230)
+    Note over DB: T2 прокидається, умова balance ≥ 700 перевіряється на актуальному значенні 300
+    DB-->>W: T2: 0 рядків змінено (300 ≥ 700 хибно)
+    W-->>T: T2: недостатньо коштів, В не зараховується
+    T->>DB: T2: UPDATE transfers SET status = REJECTED, reason = INSUFFICIENT_FUNDS (X2)
+    T->>DB: T2: COMMIT (баланси не змінювались)
+    T-->>API: T2: REJECTED
+    API-->>C2: 200 REJECTED
+    end
+
+    Note over DB: ФІНАЛ: A = 300, Б = 700, В = 0. T1 = COMPLETED, T2 = REJECTED

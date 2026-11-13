@@ -1,0 +1,18 @@
+stateDiagram-v2
+    [*] --> RECEIVED : запит надійшов, формат валідний
+    RECEIVED --> PROCESSING : BEGIN і INSERT operation_id пройшли
+    PROCESSING --> COMPLETED : debit змінив 1 рядок, credit виконано, COMMIT
+    PROCESSING --> REJECTED : debit змінив 0 рядків (недостатньо коштів), баланси не змінено
+    PROCESSING --> [*] : збій до COMMIT, ROLLBACK, запису немає (повтор з тим самим X виконає переказ заново)
+    COMPLETED --> [*] : остаточний стан, запис у transfers
+    REJECTED --> [*] : остаточний стан, запис у transfers
+    note right of PROCESSING
+        Видно тільки всередині транзакції.
+        Повтор з тим самим X під час виконання
+        чекає завершення першої транзакції
+        або отримує 202 ACCEPTED.
+    end note
+    note left of COMPLETED
+        Джерело достовірного результату:
+        закомічений рядок transfers у PostgreSQL.
+    end note

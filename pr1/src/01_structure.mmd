@@ -1,0 +1,24 @@
+flowchart LR
+    Client["Клієнт<br/>мобільний застосунок / браузер"]
+    subgraph App["Застосунок гаманця (один контейнер, кілька екземплярів за load balancer)"]
+        API["API module<br/>приймає HTTP, перевіряє формат"]
+        Transfer["Transfer module<br/>відкриває і закриває транзакцію,<br/>перевіряє operation_id"]
+        Wallet["Wallet module<br/>єдиний, хто змінює wallets"]
+        Notif["Notification module<br/>створює notification_jobs"]
+        History["History module<br/>читання балансу та історії"]
+    end
+    DB[("PostgreSQL<br/>wallets, transfers, notification_jobs")]
+    Worker["Notification worker<br/>окремий процес"]
+    Provider["Провайдер сповіщень<br/>email / push"]
+
+    Client -- "HTTPS: POST /transfers, GET /transfers/id, GET balance, GET history" --> API
+    API -- "виклик функції" --> Transfer
+    API -- "виклик функції" --> History
+    Transfer -- "виклик функції" --> Wallet
+    Transfer -- "виклик функції" --> Notif
+    Wallet -- "SQL: UPDATE wallets" --> DB
+    Transfer -- "SQL: BEGIN, INSERT / UPDATE transfers, COMMIT" --> DB
+    Notif -- "SQL: INSERT notification_jobs в тій самій транзакції" --> DB
+    History -- "SQL: SELECT" --> DB
+    Worker -- "claim job, оновлення статусу" --> DB
+    Worker -- "мережевий виклик: надіслати лист" --> Provider

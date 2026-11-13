@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant T1 as Transfer + Wallet module (T1: A→Б, 700)
+    participant DB as PostgreSQL
+    participant T2 as Transfer + Wallet module (T2: A→В, 700)
+
+    Note over DB: Початково: A = 1000, Б = 0, В = 0, разом 1000
+    Note over T1,T2: Запис = нове значення, обчислене зі старого читання. Без умови в UPDATE
+    T1->>DB: 1. SELECT balance FROM wallets WHERE id = A
+    DB-->>T1: 2. 1000
+    T2->>DB: 3. SELECT balance FROM wallets WHERE id = A
+    DB-->>T2: 4. 1000 (T1 ще нічого не змінив)
+    Note over T1: перевірка 1000 ≥ 700 — ок
+    Note over T2: перевірка 1000 ≥ 700 — ок. МІСЦЕ ПОРУШЕННЯ: дані вже застарілі
+    T1->>DB: 5. UPDATE wallets SET balance = 300 WHERE id = A (1000 − 700 зі старого читання)
+    Note over DB: рядок A заблоковано до кінця T1
+    T2->>DB: 6. UPDATE wallets SET balance = 300 WHERE id = A (теж зі старого читання)
+    Note over T2,DB: T2 ЧЕКАЄ на блокування рядка A
+    T1->>DB: 7. UPDATE wallets SET balance = 700 WHERE id = Б
+    T1->>DB: 8. status = COMPLETED, COMMIT
+    Note over DB: зафіксовано A = 300, Б = 700, блокування знято
+    DB-->>T2: 9. запис кроку 6 виконано: A = 300 (перезапис зі старого читання, lost update)
+    T2->>DB: 10. UPDATE wallets SET balance = 700 WHERE id = В
+    T2->>DB: 11. status = COMPLETED, COMMIT
+    Note over DB: ПОРУШЕННЯ. A = 300, Б = 700, В = 700, разом 1700 ≠ 1000. T1 = COMPLETED, T2 = COMPLETED. Списано 1400 при залишку 1000
