@@ -1,8 +1,4 @@
-/**
- * Stable payment status of the system. Consumers (Orders, Reports, Notifications)
- * only ever see these three values and never the provider's own status names.
- */
-export type PaymentStatus = "paid" | "processing" | "failed";
+import type { PaymentStatus } from "../../contract.ts";
 
 /**
  * The only place that translates Stripe states into PaymentStatus.

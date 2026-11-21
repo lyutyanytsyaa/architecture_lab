@@ -1,4 +1,4 @@
-import type { PaymentStatus } from "../payments/paymentStatus.ts";
+import type { PaymentStatus } from "../payments/index.ts";
 
 /** Notifications work only with the normalized status and know nothing about providers. */
 export function paymentMessageFor(status: PaymentStatus): string {

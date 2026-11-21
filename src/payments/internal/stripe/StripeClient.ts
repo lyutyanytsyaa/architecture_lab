@@ -1,5 +1,5 @@
-// Deliberate boundary violation: Payments reaches into Orders internals.
-import { markOrderPaid } from "../../orders/internal/orderMutations.ts";
+// Local stand-in for the Stripe SDK. Deterministic so it can be tested:
+// token "fail_*" -> declined, "proc_*" -> processing, anything else -> succeeded.
 
 export type StripePayload = {
   id: string;
@@ -20,8 +20,6 @@ export class StripeClient {
       : payload.id.startsWith("proc_")
         ? "processing"
         : "succeeded";
-    const response: StripeResponse = { charge_id: `ch_${payload.id}`, state };
-    markOrderPaid(payload.metadata.orderId, state === "succeeded" ? "paid" : "failed");
-    return response;
+    return { charge_id: `ch_${payload.id}`, state };
   }
 }

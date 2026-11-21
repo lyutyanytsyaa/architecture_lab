@@ -1,4 +1,4 @@
-import type { PaymentStatus } from "../payments/paymentStatus.ts";
+import type { PaymentStatus } from "../payments/index.ts";
 
 export type ReportBucket = "revenue" | "awaiting_payment" | "lost";
 

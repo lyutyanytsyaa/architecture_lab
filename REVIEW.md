@@ -1,5 +1,7 @@
 # Architecture review
 
+> Заповнено **до** рефакторингу на стартовому коді (commit `8a52a13`). Номери рядків стосуються саме цієї версії.
+
 | # | Principle | Evidence (file:line) | Practical risk | Fix |
 |---|---|---|---|---|
 | 1 | Information hiding | `src/checkout/CheckoutController.ts:3`, `:22-28` | Checkout сам будує Stripe payload: поля `id`, `amount` у копійках, `metadata.orderId`. Для другого provider із іншим форматом запиту доведеться міняти HTTP/controller-код, хоча логіка checkout не змінюється. | Payments приймає provider-neutral `PaymentRequest` і сам перетворює його на payload конкретного provider. |
@@ -12,7 +14,7 @@
 | 8 | Fitness functions | `package.json:9-13` (немає перевірок архітектури); правила існують лише як коментарі `OrderService.ts:3`, `:21` | Правила меж ніде не перевіряються автоматично. Після рефакторингу будь-який новий import з `internal` або запис у чужу таблицю знову пройде непомітно. | `npm run check:architecture` з ненульовим exit code для порушень (рівень 90). |
 | 9 | Design for change | `src/shared/calculateTotal.ts:1-23` | Бізнес-правило ціноутворення лежить у безликому `shared`. Будь-який модуль може залежати від `shared`, а `shared` сам залежить від `config` — так з'являються неявні залежності «всі від усіх». | Перенести розрахунок у модуль `pricing` з явним контрактом. |
 
-## Change impact prediction (до реалізації change request)
+## Change impact prediction (заповнити до реалізації change request)
 
 **Requirement:** підтримати другий навчальний payment provider і новий нормалізований статус `processing`. Публічний Checkout API та поведінка `paid` і `failed` не змінюються. Provider-specific payload, response і назви статусів не виходять за межі Payments.
 
@@ -35,6 +37,23 @@
 
 ## Actual impact (заповнити після реалізації)
 
-**Actual files changed:**
+**Actual files changed (рівні 60 і 75):**
+
+| Модуль | Зміна |
+|---|---|
+| Payments | нові `src/payments/contract.ts`, `src/payments/index.ts`, `internal/stripe/StripeGateway.ts`, `internal/stripe/stripeStatus.ts`; `StripeClient.ts` перенесено в `internal/stripe/` і він більше не імпортує Orders |
+| Orders | `src/orders/OrderService.ts` переписано; `internal/orderMutations.ts` → `internal/orderRecords.ts` (тепер його викликає тільки Orders) |
+| Checkout | `src/checkout/CheckoutController.ts` — без Stripe payload, з явними входами для розрахунку та audit після нього |
+| Reports, Notifications | видалено дублікати `mapPaymentStatus.ts`; додано `paymentReport.ts` і `paymentMessage.ts`, які працюють тільки з `PaymentStatus` |
+| Inventory | `StockRepository.ts` видалено; нові `src/inventory/index.ts` (`Inventory.reserve`) і `internal/stockStore.ts` |
+| Pricing | `src/shared/calculateTotal.ts` → `src/pricing/calculateTotal.ts`, тепер чиста функція |
+| Tests | нові `tests/paymentStatus.test.ts`, `tests/boundaries.test.ts`; `tests/checkout.functional.test.ts` **не змінено** |
+
+Не змінилися, як і прогнозувалося: `src/database.ts`, `src/config.ts`, `src/demo.ts`, стартові тести, форма відповіді Checkout (`orderId`, `status`, `total`, `paymentStatus`).
 
 **Difference from prediction and explanation:**
+
+1. **Inventory і calculateTotal змінилися, хоча прогноз казав, що ні.** Для самого change request (provider + `processing`) вони справді не потрібні. Їх змінили окремі завдання рівня 75: ownership залишків і local reasoning. Тобто прогноз був правильним для change request, але не враховував запланований рефакторинг меж.
+2. **Orders змінився глибше, ніж очікувалося.** Я прогнозувала лише заміну імпорту Stripe на публічний API. Насправді довелося перенести запис статусу замовлення зі `StripeClient.ts:20` в Orders, бо інакше лишався цикл Orders → Payments → Orders. Цього не було видно, поки я не почала прибирати залежність.
+3. **Reports і Notifications не просто втратили файли.** Я лишила в них маленькі функції, що працюють з нормалізованим статусом, щоб показати: consumers більше не знають назв статусів provider.
+4. **Другий provider (рівень 90) змінив тільки Payments і тести** — див. нижче.

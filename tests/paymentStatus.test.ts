@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeStripeStatus } from "../src/payments/paymentStatus.ts";
+import { normalizeStripeStatus } from "../src/payments/internal/stripe/stripeStatus.ts";
 import { reportBucketFor } from "../src/reports/paymentReport.ts";
 import { paymentMessageFor } from "../src/notifications/paymentMessage.ts";
 import { CheckoutController } from "../src/checkout/CheckoutController.ts";
