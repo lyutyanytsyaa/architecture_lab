@@ -10,12 +10,16 @@ export type StripePayload = {
 
 export type StripeResponse = {
   charge_id: string;
-  state: "succeeded" | "requires_action" | "declined";
+  state: "succeeded" | "processing" | "requires_action" | "declined";
 };
 
 export class StripeClient {
   async createCharge(payload: StripePayload): Promise<StripeResponse> {
-    const state = payload.id.startsWith("fail_") ? "declined" : "succeeded";
+    const state: StripeResponse["state"] = payload.id.startsWith("fail_")
+      ? "declined"
+      : payload.id.startsWith("proc_")
+        ? "processing"
+        : "succeeded";
     const response: StripeResponse = { charge_id: `ch_${payload.id}`, state };
     markOrderPaid(payload.metadata.orderId, state === "succeeded" ? "paid" : "failed");
     return response;
