@@ -11,8 +11,9 @@
 Потрібен Node.js 22.18 або новіший. Встановлювати залежності не потрібно.
 
 ```bash
-npm test
-npm start
+npm test                     # усі тести
+npm start                    # демо checkout
+npm run check:architecture   # архітектурні правила (exit code 1 при порушенні)
 ```
 
 ## Структура
@@ -20,6 +21,8 @@ npm start
 ```text
 src/          код застосунку
 tests/        базові функціональні тести
-REVIEW.md     шаблон архітектурного review
-DECISIONS.md  шаблон журналу рішень
+scripts/      check-architecture.ts — fitness functions
+REVIEW.md     архітектурний review до змін і фактичний вплив
+DECISIONS.md  журнал рішень і AI review
+ADR-001-payments-boundary.md  рішення про межу Payments
 ```

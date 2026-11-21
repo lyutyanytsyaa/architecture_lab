@@ -109,3 +109,47 @@
 **Trade-off:** Checkout має більше коду оркестрації, а tax і discount треба явно передавати в кожному виклику.
 
 **Verification:** тести на детермінованість, відсутність audit і незмінність frozen lines.
+
+## Decision 7: другий provider як adapter, вибір через конфігурацію
+
+**Problem:** потрібен другий provider без змін у consumers Payments.
+
+**Evidence:** до рефакторингу Stripe був вшитий у `src/checkout/CheckoutController.ts:22-28` і `src/orders/OrderService.ts:4`, `:29`.
+
+**Decision:** `LocalPayGateway` у `payments/internal/localpay` має власні request, response і статуси (`OK`, `WAIT`, `REJECT`) та власну нормалізацію. `createPaymentGateway()` обирає adapter за `runtimeConfig.paymentProvider`.
+
+**Why:** новий provider додав файли лише в Payments; Checkout, Orders, Reports і Notifications не змінилися.
+
+**Alternative:** обирати provider за валютою всередині Payments.
+
+**Why rejected:** це приховане бізнес-правило, яке в умові не задане, і його важко передбачити й протестувати.
+
+**Trade-off:** конфігурація глобальна: один provider на весь застосунок, без вибору для окремого замовлення.
+
+**Verification:** `paid`, `processing`, `failed` для обох providers через Checkout.
+
+## Decision 8: architecture fitness functions у npm run check:architecture
+
+**Problem:** правила меж існували лише як коментарі, тож будь-хто міг їх непомітно порушити знову.
+
+**Evidence:** `src/orders/OrderService.ts:3`, `:21` — коментарі «Deliberate boundary violation»; у `package.json:9-13` немає перевірок.
+
+**Decision:** `scripts/check-architecture.ts` будує граф локальних imports усього дерева `src` і перевіряє три правила: imports чужого `internal`, доступ до `database.stock` поза Inventory, цикли між файлами та модулями. Порушення виводяться з `file:line`, exit code 1.
+
+**Why:** архітектурне правило, яке не перевіряється автоматично, з часом порушиться.
+
+**Alternative:** ESLint або dependency-cruiser.
+
+**Why rejected:** стартовий проєкт навмисно без залежностей; власний скрипт на Node API нічого не встановлює.
+
+**Trade-off:** аналіз на regex, не повний TypeScript-парсер.
+
+**Verification:** тести вносять порушення в копію `src` і чекають exit code 1; на стартовому коді скрипт знаходить 9 порушень.
+
+## AI review
+
+**Корисна пропозиція (прийнята):** AI запропонував розділити `Inventory.reserve` на дві фази — спочатку перевірити всі позиції, потім списувати. Це прямо вирішило проблему часткового списання; рішення лишилось простим, без транзакцій і блокувань.
+
+**Відхилена пропозиція:** AI запропонував загальний `PaymentProviderRegistry` з реєстрацією plugins і DI-контейнером, а також перенести всі mappers статусів у `shared/statusMappers.ts`. Відхилено: для двох providers це overengineering (design for change — абстракція лише під реальну потребу), а `shared` знову зробив би назви статусів provider доступними всім модулям і погіршив би dependency direction.
+
+**Як перевіряла згенерований код:** стартовий `tests/checkout.functional.test.ts` не змінювався і проходить; для кожної зміни додано тест; `npm run check:architecture` на стартовому коді знаходить 9 порушень, а на поточному — 0; кожен diff переглянуто вручну перед commit.
