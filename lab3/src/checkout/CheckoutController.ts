@@ -1,0 +1,50 @@
+import { auditLog, runtimeConfig } from "../config.ts";
+import { OrderService } from "../orders/OrderService.ts";
+import { calculateTotal, type CartLine } from "../pricing/calculateTotal.ts";
+
+export type CheckoutRequest = {
+  orderId: string;
+  paymentToken: string;
+  currency: string;
+  lines: CartLine[];
+};
+
+export type CheckoutResponse = {
+  orderId: string;
+  status: string;
+  total: number;
+  paymentStatus: string | undefined;
+};
+
+export class CheckoutController {
+  private readonly orders: OrderService;
+
+  constructor(orders = new OrderService()) {
+    this.orders = orders;
+  }
+
+  async checkout(request: CheckoutRequest): Promise<CheckoutResponse> {
+    // Orchestration level: read configuration, compute, then perform side effects.
+    const total = calculateTotal({
+      lines: request.lines,
+      taxRate: runtimeConfig.taxRate,
+      discountPercent: runtimeConfig.discountPercent,
+    });
+    auditLog.push(`total_calculated:${total}`);
+
+    const order = await this.orders.placeOrder({
+      orderId: request.orderId,
+      lines: request.lines,
+      total,
+      currency: request.currency,
+      paymentToken: request.paymentToken,
+    });
+
+    return {
+      orderId: order.id,
+      status: order.status,
+      total: order.total,
+      paymentStatus: order.paymentStatus,
+    };
+  }
+}
